@@ -43,9 +43,11 @@ jobs:
         id: diff
         working-directory: cexplorer-community
         run: |
-          git diff --exit-code mainnet/groups/singlepoolalliance.json \
-            && echo "changed=false" >> $GITHUB_OUTPUT \
-            || echo "changed=true" >> $GITHUB_OUTPUT
+          if [[ -n $(git status --porcelain mainnet/groups/singlepoolalliance.json) ]]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Create PR if file changed
         if: steps.diff.outputs.changed == 'true'
