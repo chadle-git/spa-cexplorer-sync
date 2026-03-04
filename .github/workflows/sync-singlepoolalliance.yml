@@ -1,0 +1,90 @@
+name: Sync SinglePoolAlliance to cexplorer-community
+
+on:
+  schedule:
+    # Runs daily at 06:00 UTC
+    - cron: '0 6 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Generate singlepoolalliance.json
+        run: node scripts/generate-singlepoolalliance.mjs > /tmp/singlepoolalliance.json
+
+      - name: Show generated file
+        run: |
+          echo "Pool count: $(cat /tmp/singlepoolalliance.json | node -e "const d=require('fs').readFileSync('/dev/stdin','utf8'); console.log(JSON.parse(d).members.length)")"
+          head -20 /tmp/singlepoolalliance.json
+
+      - name: Checkout cexplorer-community fork
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/cexplorer-community
+          token: ${{ secrets.GH_PAT }}
+          path: cexplorer-community
+
+      - name: Copy generated file into fork
+        run: cp /tmp/singlepoolalliance.json cexplorer-community/mainnet/groups/singlepoolalliance.json
+
+      - name: Check for changes
+        id: diff
+        working-directory: cexplorer-community
+        run: |
+          git diff --exit-code mainnet/groups/singlepoolalliance.json \
+            && echo "changed=false" >> $GITHUB_OUTPUT \
+            || echo "changed=true" >> $GITHUB_OUTPUT
+
+      - name: Create PR if file changed
+        if: steps.diff.outputs.changed == 'true'
+        working-directory: cexplorer-community
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Create a branch with today's date
+          BRANCH="spa-sync-$(date +%Y-%m-%d)"
+          git checkout -b "$BRANCH"
+
+          # Commit
+          git add mainnet/groups/singlepoolalliance.json
+          git commit -m "chore: sync SinglePoolAlliance group ($(date +%Y-%m-%d))"
+
+          # Push to your fork
+          git push origin "$BRANCH" --force
+
+          # Open PR to upstream (vellum-labs/cexplorer-community)
+          POOL_COUNT=$(node -e "const d=require('fs').readFileSync('mainnet/groups/singlepoolalliance.json','utf8'); console.log(JSON.parse(d).members.length)")
+
+          gh pr create \
+            --repo vellum-labs/cexplorer-community \
+            --head "${{ github.repository_owner }}:$BRANCH" \
+            --base main \
+            --title "chore: sync SinglePoolAlliance group ($(date +%Y-%m-%d))" \
+            --body "$(cat <<EOF
+          ## SinglePoolAlliance Group Sync
+
+          Auto-generated from the [SinglePoolAlliance registry](https://github.com/SinglePoolAlliances/Registration/blob/master/registry.json).
+
+          - **Pools in this update:** $POOL_COUNT
+          - **Source:** https://github.com/SinglePoolAlliances/Registration/blob/master/registry.json
+          - **Generated:** $(date -u +"%Y-%m-%d %H:%M UTC")
+
+          This PR was created automatically by a scheduled GitHub Action.
+          EOF
+          )" || echo "PR may already exist for this branch, skipping."
