@@ -8,7 +8,7 @@
  */
 
 const REGISTRY_URL =
-  'https://raw.githubusercontent.com/SinglePoolAlliances/Registration/master/registry.json';
+  'https://raw.githubusercontent.com/SinglePoolAlliance/Registration/master/registry.json';
 
 // ── Minimal bech32 encoder (no dependencies needed) ──────────────────────────
 
@@ -83,11 +83,11 @@ async function main() {
 
   const group = {
     id: 'singlepoolalliance',
-    name: 'Single Pool Alliance',
+    name: 'Cardano Single Pool Alliance',
     url: 'https://singlepoolalliance.net',
     image: null,
     description:
-      'The Single Pool Alliance (SPA) is a community of independent Cardano single stake pool operators committed to decentralization.',
+      'The Cardano Single Pool Alliance (CSPA) is a community of independent Cardano single stake pool operators committed to decentralization.',
     members,
     note: 'Auto-generated from https://github.com/SinglePoolAlliances/Registration/blob/master/registry.json'
   };

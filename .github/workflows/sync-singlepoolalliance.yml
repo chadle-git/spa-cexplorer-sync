@@ -79,10 +79,10 @@ jobs:
             --body "$(cat <<EOF
           ## SinglePoolAlliance Group Sync
 
-          Auto-generated from the [SinglePoolAlliance registry](https://github.com/SinglePoolAlliances/Registration/blob/master/registry.json).
+          Auto-generated from the [SinglePoolAlliance registry](https://github.com/SinglePoolAlliance/Registration/blob/master/registry.json).
 
           - **Pools in this update:** $POOL_COUNT
-          - **Source:** https://github.com/SinglePoolAlliances/Registration/blob/master/registry.json
+          - **Source:** https://github.com/SinglePoolAlliance/Registration/blob/master/registry.json
           - **Generated:** $(date -u +"%Y-%m-%d %H:%M UTC")
 
           This PR was created automatically by a scheduled GitHub Action.
