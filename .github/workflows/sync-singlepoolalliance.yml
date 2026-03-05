@@ -2,34 +2,66 @@ name: Sync SinglePoolAlliance to cexplorer-community
 
 on:
   schedule:
-    # Runs daily at 06:00 UTC
-    - cron: '0 6 * * *'
+    # Check every 6 hours for changes to registry.json
+    - cron: '0 */6 * * *'
   workflow_dispatch: # Allow manual trigger
 
 jobs:
   sync:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
 
     steps:
       - name: Checkout this repo
         uses: actions/checkout@v4
 
+      - name: Check if registry.json has changed
+        id: registry_check
+        run: |
+          # Get current SHA of registry.json from GitHub API
+          CURRENT_SHA=$(curl -s \
+            -H "Authorization: token ${{ secrets.GH_PAT }}" \
+            "https://api.github.com/repos/SinglePoolAlliance/Registration/contents/registry.json" \
+            | node -e "const d=require('fs').readFileSync('/dev/stdin','utf8'); console.log(JSON.parse(d).sha)")
+
+          echo "Current registry.json SHA: $CURRENT_SHA"
+
+          # Read last known SHA from file in this repo
+          LAST_SHA=""
+          if [ -f ".last-registry-sha" ]; then
+            LAST_SHA=$(cat .last-registry-sha)
+          fi
+
+          echo "Last known SHA: $LAST_SHA"
+
+          if [ "$CURRENT_SHA" = "$LAST_SHA" ]; then
+            echo "No change in registry.json — skipping."
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "registry.json has changed — proceeding."
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "current_sha=$CURRENT_SHA" >> $GITHUB_OUTPUT
+          fi
+
       - name: Setup Node.js
+        if: steps.registry_check.outputs.changed == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Generate singlepoolalliance.json
+        if: steps.registry_check.outputs.changed == 'true'
         run: node scripts/generate-singlepoolalliance.mjs > /tmp/singlepoolalliance.json
 
       - name: Show generated file
+        if: steps.registry_check.outputs.changed == 'true'
         run: |
           echo "Pool count: $(cat /tmp/singlepoolalliance.json | node -e "const d=require('fs').readFileSync('/dev/stdin','utf8'); console.log(JSON.parse(d).members.length)")"
           head -20 /tmp/singlepoolalliance.json
 
       - name: Checkout cexplorer-community fork
+        if: steps.registry_check.outputs.changed == 'true'
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/cexplorer-community
@@ -37,20 +69,11 @@ jobs:
           path: cexplorer-community
 
       - name: Copy generated file into fork
+        if: steps.registry_check.outputs.changed == 'true'
         run: cp /tmp/singlepoolalliance.json cexplorer-community/mainnet/groups/singlepoolalliance.json
 
-      - name: Check for changes
-        id: diff
-        working-directory: cexplorer-community
-        run: |
-          if [[ -n $(git status --porcelain mainnet/groups/singlepoolalliance.json) ]]; then
-            echo "changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "changed=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Create PR if file changed
-        if: steps.diff.outputs.changed == 'true'
+      - name: Create PR
+        if: steps.registry_check.outputs.changed == 'true'
         working-directory: cexplorer-community
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
@@ -87,6 +110,16 @@ jobs:
           - **Source:** https://github.com/SinglePoolAlliance/Registration/blob/master/registry.json
           - **Generated:** $(date -u +"%Y-%m-%d %H:%M UTC")
 
-          This PR was created automatically by a scheduled GitHub Action.
+          This PR was created automatically when registry.json changed.
           EOF
           )" || echo "PR may already exist for this branch, skipping."
+
+      - name: Save registry SHA to prevent duplicate runs
+        if: steps.registry_check.outputs.changed == 'true'
+        run: |
+          echo "${{ steps.registry_check.outputs.current_sha }}" > .last-registry-sha
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .last-registry-sha
+          git commit -m "chore: update last known registry.json SHA"
+          git push
