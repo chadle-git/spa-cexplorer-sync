@@ -96,12 +96,23 @@ jobs:
           # Open PR to upstream (vellum-labs/cexplorer-community)
           POOL_COUNT=$(node -e "const d=require('fs').readFileSync('mainnet/groups/singlepoolalliance.json','utf8'); console.log(JSON.parse(d).members.length)")
 
-          gh pr create \
+          # Check if an open PR already exists before creating one
+          EXISTING_PR=$(gh pr list \
             --repo vellum-labs/cexplorer-community \
             --head "${{ github.repository_owner }}:$BRANCH" \
-            --base main \
-            --title "chore: sync SinglePoolAlliance group ($(date +%Y-%m-%d))" \
-            --body "$(cat <<EOF
+            --state open \
+            --json number \
+            --jq '.[0].number' 2>/dev/null || echo "")
+
+          if [ -n "$EXISTING_PR" ]; then
+            echo "PR #$EXISTING_PR already exists for branch $BRANCH — skipping."
+          else
+            gh pr create \
+              --repo vellum-labs/cexplorer-community \
+              --head "${{ github.repository_owner }}:$BRANCH" \
+              --base main \
+              --title "chore: sync SinglePoolAlliance group ($(date +%Y-%m-%d))" \
+              --body "$(cat <<EOF
           ## SinglePoolAlliance Group Sync
 
           Auto-generated from the [SinglePoolAlliance registry](https://github.com/SinglePoolAlliance/Registration/blob/master/registry.json).
@@ -112,7 +123,8 @@ jobs:
 
           This PR was created automatically when registry.json changed.
           EOF
-          )" || echo "PR may already exist for this branch, skipping."
+              )"
+          fi
 
       - name: Save registry SHA to prevent duplicate runs
         if: steps.registry_check.outputs.changed == 'true'
